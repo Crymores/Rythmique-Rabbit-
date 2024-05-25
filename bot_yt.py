@@ -1,11 +1,12 @@
 import discord
-from discord.ext import commands
-from discord_slash import SlashCommand, SlashContext, manage_commands
+from discord.ext import commands, tasks
+from discord_slash import SlashCommand, SlashContext
 import yt_dlp as youtube_dl
 import os
 import asyncio
 from collections import deque
 import json
+import random
 
 # Charger les variables d'environnement depuis le fichier config.json
 with open('config.json') as f:
@@ -25,6 +26,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 slash = SlashCommand(bot, sync_commands=True)
 
 queue = {}  # Dictionnaire pour stocker les files d'attente par guilde
+current_activity = None
 
 def get_queue(guild_id):
     if guild_id not in queue:
@@ -47,10 +49,48 @@ playlists = load_playlists()
 @bot.event
 async def on_ready():
     print(f'Connecté en tant que {bot.user}!')
-    await bot.change_presence(activity=discord.Game(name="with music commands"))
+    update_status.start()
+
+@tasks.loop(seconds=60)
+async def update_status():
+    if current_activity:
+        activity = discord.Game(name=current_activity)
+    else:
+        messages = [
+            "Les beats parfaits pour vos moments parfaits!",
+            "Des vibrations positives, partout où je vais!",
+            "Rythmique Rabbit, toujours prêt pour le show!",
+            "Rythmique Rabbit, maître des mélodies!",
+            "Apportant du bon son à chaque serveur!",
+            "Votre DJ personnel, toujours à l'écoute!",
+            "Harmonisant le chaos avec des rythmes parfaits!",
+            "Votre DJ stellaire, prêt à vous faire voyager.",
+            "Harmonisant le chaos avec des rythmes interstellaires.",
+            "Le son de la galaxie résonne avec Rythmique Rabbit.",
+            "Connecté pour apporter des vibes intergalactiques.",
+            "Laissez les ondes cosmiques envahir votre esprit.",
+            "Planant avec les meilleurs beats de l'univers.",
+            "Des beats cosmiques pour des moments galactiques.",
+            "Chillin' avec les vibes interstellaires.",
+            "Faisant danser les bits et les octets!",
+            "Le lapin rythmique est là pour vous!",
+            "La musique adoucit les serveurs!",
+            "Laissez les bonnes vibes rouler!",
+            "Diffusant des vibes cosmiques et chillax!",
+            "Rythmique Rabbit, dans un trip musical sans fin.",
+            "Rythmique Rabbit à votre service!"
+        ]
+        activity = discord.Game(name=random.choice(messages))
+    await bot.change_presence(activity=activity)
+
+async def set_activity(activity_message):
+    global current_activity
+    current_activity = activity_message
+    await update_status()
 
 @slash.slash(name="download_mp3", description="Télécharge une playlist YouTube en MP3", guild_ids=[GUILD_ID])
 async def download_mp3(ctx: SlashContext, url: str):
+    await set_activity("Télécharge une playlist YouTube...")
     channel = bot.get_channel(CHANNEL_ID)
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -83,13 +123,15 @@ async def download_mp3(ctx: SlashContext, url: str):
                 await channel.send(file=discord.File(filename))
 
             embed.description = "Téléchargement terminé !"
-            embed.set_image(url="attachment:C:\\Users\\siali\\Desktop\\youtube convert\\dllyt.jpg")
-            await ctx.send(embed=embed, file=discord.File("/mnt/data/dllyt.jpg", filename="dllyt.jpg"))
+            await ctx.send(embed=embed)
+            await set_activity(None)
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+        await set_activity(None)
 
 @slash.slash(name="download_video", description="Télécharge une vidéo YouTube en MP4", guild_ids=[GUILD_ID])
 async def download_video(ctx: SlashContext, url: str):
+    await set_activity("Télécharge une vidéo YouTube...")
     channel = bot.get_channel(CHANNEL_ID)
     ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
@@ -106,8 +148,10 @@ async def download_video(ctx: SlashContext, url: str):
             filename = ydl.prepare_filename(info_dict)
             await channel.send(file=discord.File(filename))
             await ctx.send("Téléchargement de la vidéo terminé !")
+            await set_activity(None)
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+        await set_activity(None)
 
 @slash.slash(name="join", description="Rejoint le canal vocal de l'utilisateur", guild_ids=[GUILD_ID])
 async def join(ctx: SlashContext):
@@ -120,6 +164,7 @@ async def join(ctx: SlashContext):
 
 @slash.slash(name="play", description="Joue une vidéo ou un streaming YouTube dans le canal vocal", guild_ids=[GUILD_ID])
 async def play(ctx: SlashContext, url: str):
+    await set_activity("Diffuse de la musique YouTube...")
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     if not voice_client:
         if ctx.author.voice:
@@ -144,9 +189,11 @@ async def play(ctx: SlashContext, url: str):
             await ctx.send(f"En train de jouer : {info['title']}")
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+    await set_activity(None)
 
 @slash.slash(name="play_live", description="Diffuse un live YouTube dans le canal vocal", guild_ids=[GUILD_ID])
 async def play_live(ctx: SlashContext, url: str):
+    await set_activity("Diffuse un live YouTube...")
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     if not voice_client:
         if ctx.author.voice:
@@ -171,9 +218,11 @@ async def play_live(ctx: SlashContext, url: str):
             await ctx.send(f"En train de diffuser : {info['title']}")
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+    await set_activity(None)
 
 @slash.slash(name="stream", description="Diffuse une vidéo YouTube en mode streaming", guild_ids=[GUILD_ID])
 async def stream(ctx: SlashContext, url: str):
+    await set_activity("Diffuse une vidéo YouTube...")
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     if not voice_client:
         if ctx.author.voice:
@@ -198,6 +247,7 @@ async def stream(ctx: SlashContext, url: str):
             await ctx.send(f"En train de diffuser : {info['title']}")
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+    await set_activity(None)
 
 @slash.slash(name="leave", description="Quitte le canal vocal", guild_ids=[GUILD_ID])
 async def leave(ctx: SlashContext):
@@ -236,6 +286,7 @@ async def skip(ctx: SlashContext):
 
 @slash.slash(name="enqueue", description="Ajoute une vidéo YouTube à la file d'attente", guild_ids=[GUILD_ID])
 async def enqueue(ctx: SlashContext, url: str):
+    await set_activity("Ajoute une vidéo à la file d'attente...")
     guild_id = ctx.guild_id
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
 
@@ -260,6 +311,7 @@ async def enqueue(ctx: SlashContext, url: str):
             await play_next_song(ctx, voice_client, guild_id)
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+    await set_activity(None)
 
 async def play_next_song(ctx, voice_client, guild_id):
     q = get_queue(guild_id)
@@ -317,6 +369,7 @@ async def stop(ctx: SlashContext):
 
 @slash.slash(name="search", description="Recherche des vidéos sur YouTube", guild_ids=[GUILD_ID])
 async def search(ctx: SlashContext, query: str):
+    await set_activity("Recherche des vidéos YouTube...")
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True
@@ -332,6 +385,7 @@ async def search(ctx: SlashContext, query: str):
             await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+    await set_activity(None)
 
 import lyricsgenius
 
@@ -339,6 +393,7 @@ genius = lyricsgenius.Genius(GENIUS_API_TOKEN)
 
 @slash.slash(name="lyrics", description="Affiche les paroles de la chanson en cours de lecture", guild_ids=[GUILD_ID])
 async def lyrics(ctx: SlashContext):
+    await set_activity("Affiche les paroles de la chanson en cours...")
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     if voice_client and voice_client.is_playing():
         current_song = voice_client.source.title
@@ -349,18 +404,22 @@ async def lyrics(ctx: SlashContext):
             await ctx.send("Paroles non trouvées.")
     else:
         await ctx.send("Aucune musique en cours de lecture.")
+    await set_activity(None)
 
 @slash.slash(name="volume", description="Règle le volume de la musique", guild_ids=[GUILD_ID])
 async def volume(ctx: SlashContext, volume: int):
+    await set_activity(f"Règle le volume à {volume}%")
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     if voice_client:
         voice_client.source.volume = volume / 100.0
         await ctx.send(f"Volume réglé à {volume}%")
     else:
         await ctx.send("Aucune musique en cours de lecture.")
+    await set_activity(None)
 
 @slash.slash(name="save_playlist", description="Enregistre la file d'attente actuelle en tant que playlist", guild_ids=[GUILD_ID])
 async def save_playlist(ctx: SlashContext, name: str):
+    await set_activity(f"Enregistre la playlist '{name}'")
     guild_id = ctx.guild_id
     q = get_queue(guild_id)
     if q:
@@ -369,9 +428,11 @@ async def save_playlist(ctx: SlashContext, name: str):
         await ctx.send(f"Playlist '{name}' enregistrée.")
     else:
         await ctx.send("La file d'attente est vide.")
+    await set_activity(None)
 
 @slash.slash(name="load_playlist", description="Charge une playlist enregistrée", guild_ids=[GUILD_ID])
 async def load_playlist(ctx: SlashContext, name: str):
+    await set_activity(f"Charge la playlist '{name}'")
     guild_id = ctx.guild_id
     if name in playlists:
         q = get_queue(guild_id)
@@ -382,9 +443,11 @@ async def load_playlist(ctx: SlashContext, name: str):
             await play_next_song(ctx, voice_client, guild_id)
     else:
         await ctx.send("Playlist non trouvée.")
+    await set_activity(None)
 
 @slash.slash(name="add_to_playlist", description="Ajoute une vidéo à une playlist enregistrée", guild_ids=[GUILD_ID])
 async def add_to_playlist(ctx: SlashContext, name: str, url: str):
+    await set_activity(f"Ajoute à la playlist '{name}'")
     if name in playlists:
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -401,26 +464,32 @@ async def add_to_playlist(ctx: SlashContext, name: str, url: str):
             await ctx.send(f"Une erreur s'est produite : {e}")
     else:
         await ctx.send("Playlist non trouvée.")
+    await set_activity(None)
 
 @slash.slash(name="remove_from_playlist", description="Supprime une vidéo d'une playlist enregistrée", guild_ids=[GUILD_ID])
 async def remove_from_playlist(ctx: SlashContext, name: str, index: int):
+    await set_activity(f"Supprime de la playlist '{name}'")
     if name in playlists and 0 <= index < len(playlists[name]):
         removed_song = playlists[name].pop(index)
         save_playlists(playlists)
         await ctx.send(f"Supprimé {removed_song['title']} de la playlist '{name}'.")
     else:
         await ctx.send("Playlist non trouvée ou index invalide.")
+    await set_activity(None)
 
 @slash.slash(name="playlist_details", description="Affiche les détails d'une playlist enregistrée", guild_ids=[GUILD_ID])
 async def playlist_details(ctx: SlashContext, name: str):
+    await set_activity(f"Affiche les détails de la playlist '{name}'")
     if name in playlists:
         message = "\n".join([f"{idx + 1}. {song['title']}" for idx, song in enumerate(playlists[name])])
         await ctx.send(f"Détails de la playlist '{name}':\n{message}")
     else:
         await ctx.send("Playlist non trouvée.")
+    await set_activity(None)
 
 @slash.slash(name="trending", description="Affiche les vidéos tendance sur YouTube", guild_ids=[GUILD_ID])
 async def trending(ctx: SlashContext):
+    await set_activity("Affiche les vidéos tendance sur YouTube...")
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True
@@ -436,5 +505,6 @@ async def trending(ctx: SlashContext):
             await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"Une erreur s'est produite : {e}")
+    await set_activity(None)
 
 bot.run(DISCORD_TOKEN)
